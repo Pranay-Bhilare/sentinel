@@ -8,3 +8,4 @@ langgraph-checkpoint-postgres
 psycopg[binary,pool]
 groq
 fastembed
+httpx

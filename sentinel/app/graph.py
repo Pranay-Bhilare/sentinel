@@ -5,10 +5,12 @@ from typing import TypedDict
 
 from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.graph import StateGraph
+from langgraph.types import interrupt
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from app.agents import investigator_analyze, operator_decide, supervisor_route
+from app.slack_client import send_approval_request
 from app.tools import get_logs, get_stats, restart_container, stop_container
 
 logger = logging.getLogger(__name__)
@@ -27,19 +29,22 @@ class InvestigationState(TypedDict):
     recommendation: str
     action: str
     result: str
+    human_approval: str
+    thread_id: str
 
 
 def triage_node(state: dict) -> dict:
     """Parse alert and determine target container."""
     payload = state["alert_payload"]
     alerts = payload.get("alerts", [])
+    thread_id = payload.get("fingerprint", "default_incident")
     if not alerts:
-        return {"alert_name": "unknown", "container": TARGET_CONTAINER, "action": "skip"}
+        return {"alert_name": "unknown", "container": TARGET_CONTAINER, "action": "skip", "thread_id": thread_id}
     alert = alerts[0]
     labels = alert.get("labels", {})
     alert_name = labels.get("alertname", "unknown")
     container = labels.get("name") or labels.get("container") or TARGET_CONTAINER
-    return {"alert_name": alert_name, "container": container, "action": "investigate"}
+    return {"alert_name": alert_name, "container": container, "action": "investigate", "thread_id": thread_id}
 
 
 def supervisor_node(state: dict) -> dict:
@@ -48,6 +53,19 @@ def supervisor_node(state: dict) -> dict:
     severity = (state.get("alert_payload", {}).get("alerts", [{}])[0].get("labels", {}) or {}).get("severity", "critical")
     route = supervisor_route(alert_name, severity)
     return {"action": route}
+
+
+def _route_after_investigator(state: dict) -> str:
+    """Route to send Slack before approval gate only when destructive action."""
+    recommendation = (state.get("recommendation", "SKIP") or "SKIP").upper()
+    action = state.get("action", "investigator")
+    if action == "skip":
+        return "approval_gate"
+    if "SKIP" in recommendation:
+        return "approval_gate"
+    if "RESTART" in recommendation or "STOP" in recommendation:
+        return "send_approval_request"
+    return "approval_gate"
 
 
 def investigator_node(state: dict) -> dict:
@@ -75,14 +93,55 @@ def investigator_node(state: dict) -> dict:
     return {"logs": logs, "stats": stats, "stats_summary": stats_summary, "recommendation": recommendation}
 
 
+def send_approval_request_node(state: dict) -> dict:
+    """Send Slack HITL approval request. Runs only once before interrupt."""
+    container = state.get("container", TARGET_CONTAINER)
+    alert_name = state.get("alert_name", "unknown")
+    stats_summary = state.get("stats_summary", "")
+    thread_id = state.get("thread_id", "default_incident")
+    recommendation = state.get("recommendation", "RESTART")
+    send_approval_request(
+        thread_id=thread_id,
+        container=container,
+        recommendation=recommendation,
+        alert_name=alert_name,
+        stats_summary=stats_summary,
+    )
+    return {}
+
+
+def approval_gate_node(state: dict) -> dict:
+    """Gate before Operator: for destructive actions, wait for human approval."""
+    recommendation = (state.get("recommendation", "SKIP") or "SKIP").upper()
+    action = state.get("action", "investigator")
+    thread_id = state.get("thread_id", "default_incident")
+
+    if action == "skip":
+        return {"human_approval": "approved"}
+
+    if "SKIP" in recommendation:
+        return {"human_approval": "approved"}
+
+    if "RESTART" in recommendation or "STOP" in recommendation:
+        human_approval = interrupt(thread_id)
+        logger.info("Human approval received: %s (thread_id=%s)", human_approval, thread_id)
+        return {"human_approval": str(human_approval).lower()}
+
+    return {"human_approval": "approved"}
+
+
 def operator_node(state: dict) -> dict:
     """Operator agent: confirms and executes the action."""
     container = state.get("container", TARGET_CONTAINER)
     recommendation = state.get("recommendation", "SKIP")
     action = state.get("action", "investigator")
+    human_approval = state.get("human_approval", "approved")
 
     if action == "skip":
         return {"result": "No remediation needed."}
+
+    if human_approval == "denied":
+        return {"result": "Investigation aborted by user."}
 
     decision = operator_decide(recommendation, container)
 
@@ -106,11 +165,15 @@ def build_graph():
     workflow.add_node("triage", triage_node)
     workflow.add_node("supervisor", supervisor_node)
     workflow.add_node("investigator", investigator_node)
+    workflow.add_node("send_approval_request", send_approval_request_node)
+    workflow.add_node("approval_gate", approval_gate_node)
     workflow.add_node("operator", operator_node)
     workflow.set_entry_point("triage")
     workflow.add_edge("triage", "supervisor")
     workflow.add_edge("supervisor", "investigator")
-    workflow.add_edge("investigator", "operator")
+    workflow.add_conditional_edges("investigator", _route_after_investigator)
+    workflow.add_edge("send_approval_request", "approval_gate")
+    workflow.add_edge("approval_gate", "operator")
     try:
         pool = ConnectionPool(
             DB_URI,
