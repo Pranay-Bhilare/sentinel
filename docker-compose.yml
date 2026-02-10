@@ -1,0 +1,4 @@
+# Sentinel autonomous stack (Phase 5 - services added step by step)
+version: '3.8'
+
+services: {}

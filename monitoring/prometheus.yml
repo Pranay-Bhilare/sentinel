@@ -1,0 +1,5 @@
+# Prometheus scrape config (Phase 3 - to be filled)
+global:
+  scrape_interval: 15s
+
+scrape_configs: []
