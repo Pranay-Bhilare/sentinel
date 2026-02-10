@@ -5,6 +5,8 @@ from typing import Literal
 
 from groq import Groq
 
+from app.rag import search_past_incidents
+
 logger = logging.getLogger(__name__)
 _client = None
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile")
@@ -50,19 +52,27 @@ def supervisor_route(alert_name: str, severity: str) -> Literal["investigator", 
 def investigator_analyze(
     alert_name: str, container: str, logs: str, stats_summary: str
 ) -> str:
-    """Analyze evidence and produce a recommendation."""
+    """Analyze evidence and produce a recommendation, using RAG for past incidents."""
     try:
+        query = f"{alert_name} {container} {stats_summary} {logs[-1000:] if logs else ''}"
+        past = search_past_incidents(query, limit=3)
+        past_str = ""
+        if past:
+            past_str = "\n\nPast similar incidents:\n" + "\n".join(
+                f"- Error: {p['error_text']} -> Fix: {p['fix_text']}" for p in past
+            )
+
         client = _get_client()
         response = client.chat.completions.create(
             model=GROQ_MODEL,
             messages=[
                 {
                     "role": "system",
-                    "content": "You are an infrastructure investigator. Given container logs and stats, diagnose the issue and recommend an action. Reply with a single line: RESTART, STOP, or SKIP. Optionally add a brief reason after a colon.",
+                    "content": "You are an infrastructure investigator. Given container logs and stats, diagnose the issue and recommend an action. Use past similar incidents to guide your decision when relevant. Reply with a single line: RESTART, STOP, or SKIP. Optionally add a brief reason after a colon.",
                 },
                 {
                     "role": "user",
-                    "content": f"Alert: {alert_name}, container: {container}\n\nLogs (last 50 lines):\n{logs[:2000]}\n\nStats: {stats_summary}\n\nRecommend: RESTART, STOP, or SKIP?",
+                    "content": f"Alert: {alert_name}, container: {container}\n\nLogs (last 50 lines):\n{logs[:2000]}\n\nStats: {stats_summary}{past_str}\n\nRecommend: RESTART, STOP, or SKIP?",
                 },
             ],
             max_tokens=100,

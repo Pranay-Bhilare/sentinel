@@ -40,6 +40,15 @@ services:
       postgres:
         condition: service_healthy
 
+  sentinel_seed:
+    build: ./sentinel
+    container_name: sentinel_seed
+    command: python seed_db.py
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   sentinel_worker:
     build: ./sentinel
     container_name: sentinel_worker
@@ -54,6 +63,8 @@ services:
         condition: service_started
       postgres:
         condition: service_healthy
+      sentinel_seed:
+        condition: service_completed_successfully
 
   redis:
     image: redis:alpine

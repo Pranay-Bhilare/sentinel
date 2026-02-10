@@ -18,3 +18,5 @@ venv/
 Thumbs.db
 GROQ-ONLY.md
 scenarios.md
+plan.md
+fastembeddocs.md
