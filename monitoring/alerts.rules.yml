@@ -3,7 +3,7 @@ groups:
   - name: sentinel_alerts
     rules:
       - alert: HighCPUUsage
-        expr: sum(rate(container_cpu_usage_seconds_total{image!="", name="victim_service"}[1m])) > 0.85
+        expr: sum(rate(container_cpu_usage_seconds_total{image!="", name="victim_service"}[30s])) > 0.85
         for: 10s
         labels:
           severity: critical

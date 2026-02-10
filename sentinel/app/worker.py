@@ -2,11 +2,10 @@
 Celery worker. Picks up alert payloads from Redis queue and runs investigation.
 """
 import logging
-from celery import Celery
 
+from app.celery_config import celery_app
 from app.graph import investigation_graph
 
-celery_app = Celery("sentinel", broker="redis://redis:6379/0")
 logger = logging.getLogger(__name__)
 
 
