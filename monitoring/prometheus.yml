@@ -1,5 +1,15 @@
-# Prometheus scrape config (to be filled)
 global:
-  scrape_interval: 15s
+  scrape_interval: 5s
 
-scrape_configs: []
+rule_files:
+  - "alerts.rules.yml"
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+scrape_configs:
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
