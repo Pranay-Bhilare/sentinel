@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 import logging
 
+from app.worker import run_investigation
+
 app = FastAPI(title="Sentinel API")
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -15,6 +17,5 @@ def health():
 async def webhook(payload: dict):
     """Receives Alertmanager webhook POSTs when alerts fire or resolve."""
     logger.info("Webhook received: status=%s alerts=%d", payload.get("status"), len(payload.get("alerts", [])))
-    for alert in payload.get("alerts", []):
-        logger.info("  Alert: %s - %s", alert.get("labels", {}).get("alertname"), alert.get("annotations", {}).get("summary"))
+    run_investigation.delay(payload)
     return {"status": "received"}
