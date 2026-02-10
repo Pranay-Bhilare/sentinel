@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 WORKDIR /app
-# Dependencies added in later steps (Phase 4+)
+# Dependencies added in later steps
 RUN pip install --no-cache-dir fastapi uvicorn
 
 COPY app/ ./app/

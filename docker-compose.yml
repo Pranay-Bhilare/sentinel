@@ -1,4 +1,9 @@
 # Sentinel autonomous stack (Phase 5 - services added step by step)
 version: '3.8'
 
-services: {}
+services:
+  # 1. The Victim (Phase 2)
+  orders_service:
+    build: ./victim
+    container_name: orders_service
+    ports: ["8001:8001"]

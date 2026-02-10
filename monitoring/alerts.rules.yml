@@ -1,2 +1,11 @@
-# Prometheus alert rules (Phase 3 - to be filled)
-groups: []
+# Prometheus alert rules - 85% CPU threshold
+groups:
+  - name: sentinel_alerts
+    rules:
+      - alert: HighCPUUsage
+        expr: container_cpu_usage_seconds_total{image!="", name="orders_service"} > 0.85
+        for: 10s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Orders Service CPU > 85%"

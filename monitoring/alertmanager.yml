@@ -1,4 +1,4 @@
-# Alertmanager webhook config (Phase 3 - to be filled)
+# Alertmanager webhook config (to be filled)
 route:
   receiver: 'default'
 

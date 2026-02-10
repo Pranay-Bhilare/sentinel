@@ -1,2 +1,2 @@
-# Sentinel worker - Celery + LangGraph (Phase 4 - to be filled)
+# Sentinel worker - Celery + LangGraph (to be filled)
 # GROQ-only for LLM
