@@ -1,4 +1,4 @@
-# Victim service - "bad" service for self-healing demo (Phase 2)
+# Victim service - "bad" service for self-healing demo.
 # Designed to fail: burn CPU or hang health check.
 from fastapi import FastAPI
 import threading

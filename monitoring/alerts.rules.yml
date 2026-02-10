@@ -3,9 +3,9 @@ groups:
   - name: sentinel_alerts
     rules:
       - alert: HighCPUUsage
-        expr: container_cpu_usage_seconds_total{image!="", name="orders_service"} > 0.85
+        expr: sum(rate(container_cpu_usage_seconds_total{image!="", name="victim_service"}[1m])) > 0.85
         for: 10s
         labels:
           severity: critical
         annotations:
-          summary: "Orders Service CPU > 85%"
+          summary: "Victim Service CPU > 85%"
