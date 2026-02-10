@@ -1,6 +1,8 @@
-# Alertmanager webhook config (to be filled)
 route:
-  receiver: 'default'
+  receiver: 'sentinel-webhook'
 
 receivers:
-  - name: 'default'
+  - name: 'sentinel-webhook'
+    webhook_configs:
+      - url: 'http://sentinel_api:8000/webhook'
+        send_resolved: true
