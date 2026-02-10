@@ -7,5 +7,6 @@ groups:
         for: 10s
         labels:
           severity: critical
+          name: victim_service
         annotations:
           summary: "Victim Service CPU > 85%"
