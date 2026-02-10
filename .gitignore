@@ -16,3 +16,5 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+GROQ-ONLY.md
+scenarios.md
