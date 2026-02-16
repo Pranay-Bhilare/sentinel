@@ -11,7 +11,16 @@ from psycopg_pool import ConnectionPool
 
 from app.agents import investigator_analyze, operator_decide, supervisor_route
 from app.slack_client import send_approval_request
-from app.tools import get_logs, get_stats, restart_container, stop_container
+from app.tools import (
+    get_logs,
+    get_stats,
+    restart_container,
+    stop_container,
+    network_disconnect,
+    network_connect,
+    update_container_resources,
+    rollback_container,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +72,8 @@ def _route_after_investigator(state: dict) -> str:
         return "approval_gate"
     if "SKIP" in recommendation:
         return "approval_gate"
-    if "RESTART" in recommendation or "STOP" in recommendation:
+    destructive_actions = ["RESTART", "STOP", "NETWORK_DISCONNECT", "UPDATE_RESOURCES", "ROLLBACK"]
+    if any(destructive in recommendation for destructive in destructive_actions):
         return "send_approval_request"
     return "approval_gate"
 
@@ -122,7 +132,8 @@ def approval_gate_node(state: dict) -> dict:
     if "SKIP" in recommendation:
         return {"human_approval": "approved"}
 
-    if "RESTART" in recommendation or "STOP" in recommendation:
+    destructive_actions = ["RESTART", "STOP", "NETWORK_DISCONNECT", "UPDATE_RESOURCES", "ROLLBACK"]
+    if any(destructive in recommendation for destructive in destructive_actions):
         human_approval = interrupt(thread_id)
         logger.info("Human approval received: %s (thread_id=%s)", human_approval, thread_id)
         return {"human_approval": str(human_approval).lower()}
@@ -145,19 +156,39 @@ def operator_node(state: dict) -> dict:
 
     decision = operator_decide(recommendation, container)
 
-    if decision == "restart":
-        try:
+    try:
+        if decision == "restart":
             msg = restart_container(container)
             return {"result": msg, "action": "restarted"}
-        except Exception as e:
-            return {"result": f"Restart failed: {e}"}
-    if decision == "stop":
-        try:
+        elif decision == "stop":
             msg = stop_container(container)
             return {"result": msg, "action": "stopped"}
-        except Exception as e:
-            return {"result": f"Stop failed: {e}"}
-    return {"result": f"Operator skipped. Recommendation was: {recommendation}"}
+        elif decision == "network_disconnect":
+            msg = network_disconnect(container)
+            return {"result": msg, "action": "network_disconnected"}
+        elif decision.startswith("network_connect:"):
+            network = decision.split(":", 1)[1]
+            msg = network_connect(container, network)
+            return {"result": msg, "action": "network_connected"}
+        elif decision.startswith("update_resources:"):
+            params_str = decision.split(":", 1)[1]
+            memory = None
+            cpu = None
+            for param in params_str.split(","):
+                if param.startswith("memory="):
+                    memory = int(param.split("=")[1])
+                elif param.startswith("cpu="):
+                    cpu = float(param.split("=")[1])
+            msg = update_container_resources(container, memory_limit_mb=memory, cpu_limit=cpu)
+            return {"result": msg, "action": "resources_updated"}
+        elif decision == "rollback":
+            msg = rollback_container(container)
+            return {"result": msg, "action": "rolled_back"}
+        else:
+            return {"result": f"Operator skipped. Recommendation was: {recommendation}"}
+    except Exception as e:
+        logger.exception("Operator action failed")
+        return {"result": f"Action failed: {e}"}
 
 
 def build_graph():
