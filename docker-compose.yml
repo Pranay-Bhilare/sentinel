@@ -3,6 +3,7 @@ services:
     build: ./victim
     container_name: victim_service
     ports: ["8001:8001"]
+    mem_limit: 512m
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:latest

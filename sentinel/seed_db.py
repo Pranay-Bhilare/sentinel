@@ -47,11 +47,21 @@ INCIDENTS = [
     ("psycopg.OperationalError: connection refused. Cannot connect to database.", "Check Postgres service. Do not restart app until DB is reachable."),
     ("Database connection refused. App cannot reach postgres:5432.", "Verify Postgres is up. Check docker network. Do NOT restart app."),
     ("DB Connection Refused. SENTINEL_DB_URI or postgres host unreachable.", "Check Postgres. Ensure postgres container healthy before restarting app."),
-    # --- 500 / APP ERRORS (different fix) ---
-    ("Error: 500 Internal Server Error. Application crash in request handler.", "Rollback recent commit. Check application logs for stack trace."),
-    ("500 Internal Server Error. Unhandled exception in FastAPI endpoint.", "Inspect logs for traceback. Consider rollback if recent deploy."),
-    ("Recurring 500 errors. Application throwing exceptions in production.", "Check logs, rollback if bad deploy. Do not blindly restart."),
-    ("500 Internal Server Error. Python traceback in logs.", "Review error logs. Rollback or fix code. Restart only if process is dead."),
+    # --- 500 / BAD DEPLOY → ROLLBACK ---
+    ("Error: 500 Internal Server Error. Application crash in request handler.", "Rollback recent deploy. Check application logs for stack trace."),
+    ("500 Internal Server Error. Unhandled exception in FastAPI endpoint.", "Inspect logs for traceback. Recommend ROLLBACK if recent deploy."),
+    ("Recurring 500 errors. Application throwing exceptions. Bad deploy detected.", "ROLLBACK to previous image. Do not blindly restart."),
+    ("HighErrorRate alert. app_failures_total increasing. Bad deploy or broken release.", "ROLLBACK container to previous image."),
+    ("Bad deploy mode. victim_service reporting application failures. /break/bad_deploy was triggered.", "ROLLBACK to previous image."),
+    ("app_failures_total counter increasing. Service returning 500s after deploy.", "ROLLBACK container to last known good image."),
+    # --- NETWORK FLOOD → NETWORK_DISCONNECT ---
+    ("HighNetworkTx alert. victim_service transmitting at high rate. Network flood or noisy neighbour.", "NETWORK_DISCONNECT to contain. Isolate container from network first."),
+    ("Container network transmit bytes rate very high. Possible network abuse or bug.", "NETWORK_DISCONNECT to stop blast radius. Then investigate."),
+    ("HighNetworkTx fired. victim_service flooding network. Contain before fixing.", "NETWORK_DISCONNECT. Isolate container from network."),
+    # --- MEMORY PRESSURE → UPDATE_RESOURCES ---
+    ("HighMemoryUsage alert. victim_service memory above threshold. OOM risk.", "UPDATE_RESOURCES: memory=256 or restart to clear leak."),
+    ("Container memory usage high. Near limit. Stats show memory_stats.usage growing.", "UPDATE_RESOURCES: memory=256 to raise limit, or RESTART if leak."),
+    ("Memory pressure on victim_service. container_memory_usage_bytes > 40MB. OOM possible.", "UPDATE_RESOURCES: memory=256. Increase container memory limit."),
     # --- NETWORK / TIMEOUT ---
     ("Connection timeout. Service cannot reach external API.", "Check network, firewall, DNS. Restart only if service is stuck."),
     ("Read timeout on database connection. Slow queries or DB overload.", "Check Postgres performance. Consider connection pool tuning."),

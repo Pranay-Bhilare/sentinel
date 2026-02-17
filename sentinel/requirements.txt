@@ -5,6 +5,8 @@ redis
 docker
 langgraph
 langgraph-checkpoint-postgres
+langchain-core
+langchain-groq
 psycopg[binary,pool]
 groq
 fastembed

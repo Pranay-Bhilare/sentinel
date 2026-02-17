@@ -1,4 +1,4 @@
-# Prometheus alert rules - 85% CPU threshold
+# Prometheus alert rules for Sentinel demo scenarios
 groups:
   - name: sentinel_alerts
     rules:
@@ -10,3 +10,30 @@ groups:
           name: victim_service
         annotations:
           summary: "Victim Service CPU > 85%"
+
+      - alert: HighMemoryUsage
+        expr: container_memory_usage_bytes{name="victim_service"} > 200 * 1024 * 1024
+        for: 10s
+        labels:
+          severity: critical
+          name: victim_service
+        annotations:
+          summary: "Victim Service memory > 200MB"
+
+      - alert: HighNetworkTx
+        expr: sum(rate(container_network_transmit_bytes_total{name="victim_service"}[1m])) > 50000
+        for: 10s
+        labels:
+          severity: critical
+          name: victim_service
+        annotations:
+          summary: "Victim Service network TX rate high"
+
+      - alert: HighErrorRate
+        expr: increase(app_failures_total[1m]) > 0
+        for: 5s
+        labels:
+          severity: critical
+          name: victim_service
+        annotations:
+          summary: "Victim Service reporting application failures"
