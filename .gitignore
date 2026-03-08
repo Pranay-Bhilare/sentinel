@@ -21,4 +21,5 @@ scenarios.md
 plan.md
 fastembeddocs.md
 remediation-toolkit.md
-*.md
+improvements.md
+docs/architecture.md
