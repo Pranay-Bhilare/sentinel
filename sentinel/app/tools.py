@@ -1,6 +1,9 @@
 """Docker SDK tools for container introspection and control."""
 import logging
 import re
+import json
+import urllib.request
+import urllib.parse
 
 import docker
 
@@ -161,3 +164,57 @@ def rollback_container(container_name: str) -> str:
     except Exception as e:
         logger.exception("Rollback failed")
         return f"Rollback failed: {e}"
+
+
+def fetch_recent_traces(service_name: str, limit: int = 5) -> str:
+    """Fetch recent distributed traces from Jaeger for a service. Useful for finding API endpoints that are slow (latency) or throwing errors."""
+    logger.info("Tool: fetch_recent_traces(service=%s, limit=%s)", service_name, limit)
+    try:
+        url = f"http://jaeger:16686/api/traces?service={urllib.parse.quote(service_name)}&limit={limit}"
+        req = urllib.request.Request(url)
+        with urllib.request.urlopen(req) as response:
+            data = json.loads(response.read().decode())
+            
+        if not data.get("data"):
+            return "No traces found."
+            
+        traces_info = []
+        for t in data["data"]:
+            trace_id = t["traceID"]
+            spans = t.get("spans", [])
+            traces_info.append(f"\nTrace ID: {trace_id} ({len(spans)} spans)")
+            
+            # Format span data to show hierarchy and duration
+            for span in spans:
+                duration_ms = span.get("duration", 0) / 1000.0
+                op_name = span.get("operationName", "unknown")
+                tags = {tg["key"]: tg["value"] for tg in span.get("tags", [])}
+                
+                # We only log spans that are somewhat significant or have errors to save context length
+                if duration_ms > 10 or tags.get("error"):
+                    err_str = " [ERROR]" if tags.get("error") else ""
+                    traces_info.append(f"  - Span: {op_name}{err_str} | Duration: {duration_ms}ms | Tags: {tags}")
+            
+        return "\n".join(traces_info)[:4000] # Limit to avoid context bloat
+    except Exception as e:
+        return f"Failed to fetch traces: {e}"
+
+
+def read_docker_source_code(container_name: str, file_path: str, start_line: int, end_line: int) -> str:
+    """Reads specific lines from a file inside a running docker container. Use this to read the problematic application code."""
+    logger.info("Tool: read_docker_source_code(container=%s, file=%s)", container_name, file_path)
+    try:
+        container = client.containers.get(container_name)
+        # Using sed to extract specific line ranges: sed -n '1,100p' filename
+        cmd = ["sed", "-n", f"{start_line},{end_line}p", file_path]
+        exit_code, output = container.exec_run(cmd)
+        if exit_code != 0:
+            return f"Failed to read file: exit code {exit_code}. Output: {output.decode('utf-8')}"
+        
+        # Add line numbers out of courtesy for the AI
+        lines = output.decode("utf-8").splitlines()
+        numbered_lines = [f"{start_line + i}: {line}" for i, line in enumerate(lines)]
+        return "\n".join(numbered_lines)
+    except Exception as e:
+        return f"Failed to read source code: {e}"
+
