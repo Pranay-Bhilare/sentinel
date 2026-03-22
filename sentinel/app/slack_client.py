@@ -14,6 +14,7 @@ SLACK_CHANNEL_ID = os.getenv("SLACK_CHANNEL_ID")
 def send_tool_approval_request(
     thread_id: str,
     container: str,
+    rca_report: str,
     tool_calls: list[dict],
 ) -> bool:
     """Send one Slack message per operator step listing ALL proposed tool_calls. Single HITL boundary before execution."""
@@ -35,12 +36,19 @@ def send_tool_approval_request(
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"*Operator wants to run*\n*Container:* `{container}`\n\n{tool_text}",
+                "text": f"🚨 *Alert Triggered on Container:* `{container}`\n\n🧠 *Investigator RCA (Long Term Fix):*\n{rca_report}",
             },
         },
         {
             "type": "section",
-            "text": {"type": "mrkdwn", "text": "Approve or deny these tool calls:"},
+            "text": {
+                "type": "mrkdwn",
+                "text": f"🛠️ *Operator Immediate Fix Proposal:*\n{tool_text}",
+            },
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "Approve or deny these immediate tactical fixes:"},
         },
         {
             "type": "actions",
