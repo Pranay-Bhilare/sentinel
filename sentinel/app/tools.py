@@ -65,7 +65,7 @@ def read_docker_source_code(container_name: str, file_path: str, start_line: int
     except Exception as e:
         return f"Failed to read source code: {e}"
 
-INVESTIGATOR_TOOLS = [fetch_recent_traces, read_docker_source_code]
+# NOTE: We register tools at the bottom after they are all defined.
 
 # ==========================================
 # OPERATOR TOOLS (Remediation Actions)
@@ -186,10 +186,15 @@ def rollback_container(container_name: str) -> str:
     except Exception as e:
         return f"Rollback failed: {e}"
 
-OPERATOR_TOOLS = [
+INVESTIGATOR_TOOLS = [
+    fetch_recent_traces,
+    read_docker_source_code,
     get_logs,
     get_stats,
-    inspect_container,
+    inspect_container
+]
+
+OPERATOR_TOOLS = [
     restart_container,
     stop_container,
     network_disconnect,

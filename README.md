@@ -1,46 +1,34 @@
 # Sentinel
 
-Automated infrastructure remediation engine that ingests Prometheus alerts and executes container-level recovery actions using an agent-based investigation workflow and a custom Docker SDK remediation toolkit.
+Automated infrastructure remediation engine that ingests Prometheus alerts and performs autonomous Root Cause Analysis (RCA) using distributed tracing and container-level telemetry. It proposes recovery actions through an agent-based workflow with a custom Docker SDK remediation toolkit.
 
 ## Tech Stack
 
-Python · FastAPI · Celery · Redis · Docker SDK · PostgreSQL · Prometheus · Slack API · LangGraph · FastEmbed · cAdvisor
+Python · FastAPI · Celery · Redis · Docker SDK · PostgreSQL · Prometheus · OpenTelemetry · Jaeger · Slack API · LangGraph · cAdvisor
 
 ## Overview
 
-Sentinel receives alert webhooks from Prometheus/Alertmanager, runs a multi-step investigation workflow powered by agents, and proposes container-level remediations (restart, network isolation, resource scaling, rollback). A Slack-based approval gate ensures human-in-the-loop safeguards before any infrastructure changes are executed.
+Sentinel receives alert webhooks from Prometheus/Alertmanager and initiates a multi-step investigation. Powered by dynamic agents, it analyzes distributed traces and system logs to pinpoint the underlying issue before proposing container-level remediations (restart, resource scaling, or rollback). A Slack-based approval gate ensures human-in-the-loop safeguards before any changes are executed.
 
 **Key capabilities:**
 
-- **Automated remediation engine** — Ingest Prometheus alerts and execute container-level recovery actions (restart, network isolation, dynamic resource scaling, rollback) via a Docker SDK–based toolkit.
-- **Non-blocking alert pipeline** — FastAPI + Celery + Redis for high-volume incident bursts without API timeouts; reliable background execution of remediation workflows.
-- **Stateful multi-step workflows** — LangGraph with persistent execution history in PostgreSQL; safe resumption of long-running tasks after worker failures.
-- **RAG + HITL** — Retrieval-augmented generation (pgvector) for historical incident retrieval; Slack approval gate for human-in-the-loop safeguards.
-
-## Alert Scenarios
-
-| Scenario | Alert | Remediation |
-|---------|-------|-------------|
-| CPU runaway | HighCPUUsage | `restart_container` |
-| Network flood | HighNetworkTx | `network_disconnect` |
-| Memory pressure | HighMemoryUsage | `update_container_resources` |
-| Bad deploy | HighErrorRate | `rollback_container` |
-
-The victim service exposes `/break/cpu`, `/break/network`, `/break/memory`, and `/break/bad_deploy` to simulate each failure mode.
+- **Autonomous RCA Engine** — Analyzes OpenTelemetry traces and container logs to identify code-level or infrastructure-level bottlenecks.
+- **Automated Remediation** — Executes recovery actions (restart, dynamic resource scaling, rollback) via a Docker SDK–based toolkit.
+- **Non-blocking Pipeline** — FastAPI + Celery + Redis architecture to handle high-volume incident bursts reliably in the background.
+- **Stateful Workflows** — LangGraph with PostgreSQL persistence for resilient execution and human-in-the-loop approval gates.
 
 ## Architecture
 
-- **Prometheus + cAdvisor** — Scrape container and application metrics; fire alerts per rules in `monitoring/alerts.rules.yml`.
-- **Alertmanager** — Sends webhooks to Sentinel API on alert fire/resolve.
-- **Sentinel API** — Receives webhooks, enqueues `run_investigation`; handles Slack interactive events, enqueues `resume_investigation`.
-- **Celery + Redis** — Task queue; background execution of investigation workflows.
-- **LangGraph** — Triage → Investigator → Operator agent loop; PostgresSaver for checkpointing and resume.
-- **Slack** — Single HITL: approve or deny proposed tool calls before execution.
-- **Docker SDK** — Operator tools (restart, network disconnect/connect, update resources, rollback, logs, stats, inspect).
+- **Prometheus + cAdvisor** — Monitors container metrics and fires alerts based on predefined rules.
+- **OpenTelemetry + Jaeger** — Provides distributed tracing for deep inspection of application requests.
+- **Sentinel API** — Ingests alerts and coordinates the investigation; handles Slack interactions.
+- **Celery Workers** — Executes background investigation and remediation tasks.
+- **LangGraph Agents** — Triage → Investigator → Operator loop for structured decision-making.
+- **Slack** — Provides a centralized interface for incident notification and manual approval.
 
 ## Setup
 
-**Prerequisites:** Docker, Docker Compose, Groq API key, Slack app (bot token, channel ID, signing secret).
+**Prerequisites:** Docker, Docker Compose, Groq API key, Slack app credentials.
 
 Create `.env` in the repo root:
 
@@ -57,22 +45,9 @@ SLACK_SIGNING_SECRET=...
 docker compose up --build
 ```
 
-## Triggering Scenarios
+## Internal Testing
 
-With the stack running:
+The system can be tested by interacting with the internal endpoints of the monitored service (e.g., triggering a cache warmup job or generating heavy reports) and observing the autonomous investigation flow in Slack and Jaeger.
 
-```bash
-# CPU runaway → restart
-curl -X POST http://localhost:8001/break/cpu
+Each alert triggers the Sentinel workflow, which post its findings and proposed solutions to the configured Slack channel.
 
-# Network flood → network isolation
-curl -X POST http://localhost:8001/break/network
-
-# Memory pressure → resource scaling
-curl -X POST http://localhost:8001/break/memory
-
-# Bad deploy → rollback
-curl -X POST http://localhost:8001/break/bad_deploy
-```
-
-Each scenario fires a Prometheus alert; Sentinel runs the investigation workflow and sends a Slack message listing proposed tool calls. Approve or deny to execute or abort.

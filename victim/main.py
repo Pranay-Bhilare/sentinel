@@ -99,34 +99,56 @@ def bad_deploy():
     return {"msg": "Bad deploy mode: errors will be reported periodically"}
 
 
-@app.get("/api/fetch_orders")
-def fetch_orders():
-    """Simulates an endpoint that does N+1 queries. Takes a long time."""
-    with tracer.start_as_current_span("db.query_orders"):
-        time.sleep(0.1) # Simulate main query
+import uuid
+from typing import Dict
+
+# Application-level optimization cache to reduce DB load
+_USER_PROFILE_CACHE: Dict[str, str] = {}
+
+@app.get("/api/v1/organizations/{org_id}/users")
+def fetch_organization_users(org_id: str, limit: int = 150):
+    """
+    Fetches user profiles for an organization in bulk.
+    We utilize an in-memory application cache to optimize repeated lookups 
+    for the same organizational batches during peak hours.
+    """
+    batch_txn_id = f"{org_id}_{uuid.uuid4()}"
     
-    # N+1 simulation
-    for i in range(50):
-        with tracer.start_as_current_span(f"db.query_item_{i}"):
-            time.sleep(0.05) # Simulate individual item query
+    with tracer.start_as_current_span("db.query_org_users"):
+        # Simulate network latency to primary DB replica
+        time.sleep(0.1)
+        
+    with tracer.start_as_current_span("cache.store_profiles"):
+        # Serialize heavily nested user objects from DB
+        serialized_payload = "x" * (limit * 1024 * 1024)
+        
+        # Store in cache for subsequent identical requests
+        _USER_PROFILE_CACHE[batch_txn_id] = serialized_payload
+        time.sleep(0.05)
             
-    return {"status": "success", "orders_fetched": 50}
+    return {
+        "status": "success", 
+        "org_id": org_id,
+        "records_processed": limit,
+        "cache_hits": len(_USER_PROFILE_CACHE)
+    }
 
-
-@app.post("/break/n_plus_one")
-def trigger_n_plus_one():
-    """Starts a background thread hitting the N+1 endpoint repeatedly."""
-    def hit_endpoint():
+@app.post("/api/v1/internal/cron/warmup_caches")
+def warmup_organization_caches():
+    """Internal cron job: Warms up user caches for the daily morning traffic spike."""
+    def _warmup_task():
         import urllib.request
-        while True:
+        for i in range(1, 7):
             try:
-                urllib.request.urlopen("http://127.0.0.1:8001/api/fetch_orders", timeout=10)
+                # Pre-fetch top 6 largest organizations to populate the cache
+                url = f"http://127.0.0.1:8001/api/v1/organizations/org_{i}/users?limit=150"
+                urllib.request.urlopen(url, timeout=10)
             except Exception:
                 pass
             time.sleep(1)
 
-    threading.Thread(target=hit_endpoint, daemon=True).start()
-    return {"msg": "Triggered N+1 query loop! Check Jaeger for massive latency traces."}
+    threading.Thread(target=_warmup_task, daemon=True).start()
+    return {"status": "scheduled", "job_type": "cache_warmup_job"}
 
 
 @app.get("/broken")
