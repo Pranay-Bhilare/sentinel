@@ -31,12 +31,17 @@ def send_tool_approval_request(
 
     tool_text = "\n".join(lines) if lines else "No tool calls"
 
+    # Truncate and sanitize RCA report for Slack limits/rendering
+    clean_rca = rca_report.replace("**", "*").replace("#", "").strip()
+    if len(clean_rca) > 2800:
+        clean_rca = clean_rca[:2700] + "\n\n...(report truncated due to length)..."
+
     blocks = [
         {
             "type": "section",
             "text": {
                 "type": "mrkdwn",
-                "text": f"🚨 *Alert Triggered on Container:* `{container}`\n\n🧠 *Investigator RCA (Long Term Fix):*\n{rca_report}",
+                "text": f"🚨 *Alert Triggered on Container:* `{container}`\n\n🧠 *Investigator RCA (Long Term Fix):*\n{clean_rca}",
             },
         },
         {

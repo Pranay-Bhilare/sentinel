@@ -53,12 +53,20 @@ def investigator_agent_node(state: dict) -> dict:
     if not msgs:
         alert_name = state.get("alert_name", "unknown")
         container = state.get("container", TARGET_CONTAINER)
-        # Initiating the autonomous RCA agent
+        # Rigid, technical prompt for Slack compatibility and tool efficiency
         initial_msg = (
-            f"Alert: {alert_name} on container: {container}. "
-            f"You are the autonomous Investigator Agent. Use your trace fetching (fetch_recent_traces) and source code reading (read_docker_source_code) tools to find the root cause of the error. "
-            f"Search Jaeger traces first, find interesting files/lines, then read the source code. "
-            f"Once you find the issue, output a detailed but concise markdown RCA Report explaining what is wrong in the code and how to fix it."
+            f"Alert: {alert_name} on container: {container}.\n\n"
+            f"You are the Investigator Agent. Conduct a deep Root Cause Analysis using traces, code, logs, and system stats.\n\n"
+            f"CONSTRAINTS:\n"
+            f"1. *SOURCE CODE*: When using 'read_docker_source_code', read a MAX of 100 lines per call. Focus on lines identified in traces.\n"
+            f"2. *CONCISENESS*: Final report MUST be under 1500 characters. Summarize the logic bug briefly.\n"
+            f"3. *FORMATTING*: Simple Slack mrkdwn only. *No headers (#)*. Use *BOLD CAPS* (single asterisks) for sections.\n"
+            f"4. *REMEDIATION*: You cannot stop/modify internal functions or endpoints. Suggest only *container-level* actions from the Operator's list:\n"
+            f"- restart_container: Reboots full service.\n"
+            f"- update_container_resources: Scales CPU/Memory (e.g. mb=1500).\n"
+            f"- rollback_container: Restores stable version.\n"
+            f"- network_disconnect: Isolates the container.\n\n"
+            f"GOAL: Output a short RCA and identify the 'Proposed Immediate Fix By Operator' for the container `{container}`."
         )
         msgs = [HumanMessage(content=initial_msg)]
         
@@ -68,7 +76,6 @@ def investigator_agent_node(state: dict) -> dict:
         response = AIMessage(content=str(response))
         
     out = {"investigator_messages": [response]}
-    # If no tool calls, it means the agent finished its RCA.
     if not (getattr(response, "tool_calls", None) or []):
         out["rca_report"] = (response.content or "No RCA found.").strip()
     return out
@@ -90,12 +97,13 @@ def operator_agent_node(state: dict) -> dict:
     if not msgs:
         rca_report = state.get("rca_report", "Unknown RCA")
         alert = state.get("alert_name", "unknown")
-        # Prompt the operator to suggest an immediate fix
+        # Prompt the operator to be the 'hands' for the investigator
         initial_msg = (
-            f"We have identified the Root Cause of the {alert} alert:\n\n"
+            f"RCA and Recommended Tactical Fix for {alert}:\n\n"
             f"{rca_report}\n\n"
-            f"You are the Operator Agent. Your job is ONLY to propose an *immediate tactical infrastructure fix* to stabilize the system right now (e.g. restart container, throttle networks, update memory limits). "
-            f"If an immediate infra fix is appropriate, call the tool. Do NOT explain the RCA again."
+            f"You are the Operator Agent (Infrastructure Executor). Look at the 'Proposed Tactical Fix' suggested by the Investigator. \n"
+            f"Your ONLY job is to execute the appropriate remediation tool precisely as suggested. Do not argue or invent new values unless the proposal is technically impossible. "
+            f"Call the tool(s) now to stabilize the container."
         )
         msgs = [HumanMessage(content=initial_msg)]
         
