@@ -65,8 +65,6 @@ def read_docker_source_code(container_name: str, file_path: str, start_line: int
     except Exception as e:
         return f"Failed to read source code: {e}"
 
-# NOTE: We register tools at the bottom after they are all defined.
-
 # ==========================================
 # OPERATOR TOOLS (Remediation Actions)
 # ==========================================
